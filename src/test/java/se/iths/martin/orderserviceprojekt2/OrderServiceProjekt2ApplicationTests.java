@@ -11,6 +11,7 @@ import se.iths.martin.orderserviceprojekt2.model.OrderStatus;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 @SpringBootTest
 class OrderServiceProjekt2ApplicationTests {
@@ -32,6 +33,19 @@ class OrderServiceProjekt2ApplicationTests {
 		Order order = new Order();
 		assertEquals(OrderStatus.CREATED, order.getStatus());
 		assertNull(order.getStripeCheckoutSessionId());
+	}
+
+	// Kontrollerar databasens standardvärden när en order skapas utan de nya betalningsflaggorna.
+	@Test
+	@Transactional
+	void databaseDefaultsPaymentFlagsToFalse() {
+		entityManager.createNativeQuery("insert into orders (customer_name) values ('database-default-test')")
+				.executeUpdate();
+		Order loaded = entityManager.createQuery(
+				"select o from Order o where o.customerName = 'database-default-test'", Order.class)
+				.getSingleResult();
+		assertFalse(loaded.isStockReserved());
+		assertFalse(loaded.isConfirmationPending());
 	}
 
 	// Kontrollerar att betalningsstatus och Stripe-koppling kan sparas i testdatabasen.

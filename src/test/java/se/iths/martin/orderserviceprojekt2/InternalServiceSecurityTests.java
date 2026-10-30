@@ -1,5 +1,7 @@
 package se.iths.martin.orderserviceprojekt2;
 
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.RequestDispatcher;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -10,6 +12,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -39,6 +42,18 @@ class InternalServiceSecurityTests {
         mockMvc.perform(post("/internal/security-test")
                         .header("X-Internal-Service-Token", "internal-test-token-not-for-real-use-123456"))
                 .andExpect(status().isOk());
+    }
+
+    // Kontrollerar att serverns felhantering bevarar ursprungsfelet utan att kräva kund-JWT.
+    @Test
+    void preservesServerErrorDuringErrorDispatch() throws Exception {
+        mockMvc.perform(get("/error").with(request -> {
+                            request.setDispatcherType(DispatcherType.ERROR);
+                            return request;
+                        })
+                        .requestAttr(RequestDispatcher.ERROR_STATUS_CODE, 500)
+                        .requestAttr(RequestDispatcher.ERROR_REQUEST_URI, "/internal/payment-orders/example"))
+                .andExpect(status().isInternalServerError());
     }
 
     // Denna endpoint finns bara i testkontexten, inte i den körande tjänsten.

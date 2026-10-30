@@ -38,7 +38,9 @@ public class Order {
 
     @Column(unique = true)
     private UUID stockReservationId;
+    @Column(nullable = false, columnDefinition = "boolean default false")
     private boolean stockReserved;
     private java.time.Instant checkoutRequestedAt;
+    @Column(nullable = false, columnDefinition = "boolean default false")
     private boolean confirmationPending;
 }

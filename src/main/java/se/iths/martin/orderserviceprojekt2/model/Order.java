@@ -28,4 +28,10 @@ public class Order {
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL)
     private List<OrderItem> orderItems;
     private BigDecimal totalPrice;
+
+    @Enumerated(EnumType.STRING)
+    private OrderStatus status = OrderStatus.CREATED;
+
+    @Column(unique = true)
+    private String stripeCheckoutSessionId;
 }

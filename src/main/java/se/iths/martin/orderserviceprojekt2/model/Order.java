@@ -39,4 +39,5 @@ public class Order {
     @Column(unique = true)
     private UUID stockReservationId;
     private boolean stockReserved;
+    private java.time.Instant checkoutRequestedAt;
 }

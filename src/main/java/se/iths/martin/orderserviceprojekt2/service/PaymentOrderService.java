@@ -9,6 +9,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import se.iths.martin.orderserviceprojekt2.Repository.OrderRepository;
 import se.iths.martin.orderserviceprojekt2.client.StockReservationClient;
 import se.iths.martin.orderserviceprojekt2.dto.OrderRequestDTO;
+import se.iths.martin.orderserviceprojekt2.dto.PaymentOrderResponseDTO;
+import se.iths.martin.orderserviceprojekt2.dto.OrderItemResponseDTO;
 import se.iths.martin.orderserviceprojekt2.model.Order;
 import se.iths.martin.orderserviceprojekt2.model.OrderItem;
 import se.iths.martin.orderserviceprojekt2.model.OrderStatus;
@@ -46,6 +48,7 @@ public class PaymentOrderService {
                 order.setStockReservationId(reservationId);
                 order.setCustomerName(customerName);
                 order.setOrderDate(LocalDateTime.now());
+                order.setCheckoutRequestedAt(java.time.Instant.now());
                 order.setStatus(OrderStatus.PENDING_PAYMENT);
                 order.setTotalPrice(BigDecimal.ZERO);
                 var items = new ArrayList<OrderItem>();
@@ -110,6 +113,38 @@ public class PaymentOrderService {
             order.setStockReserved(false);
             order.setStatus(OrderStatus.CANCELLED);
         });
+    }
+
+    // Förbereder ordern och returnerar endast de uppgifter som betalningstjänsten behöver.
+    public PaymentOrderResponseDTO prepareCheckout(UUID reservationId, String customerName, OrderRequestDTO request) {
+        return snapshot(prepare(reservationId, customerName, request));
+    }
+
+    // Kopplar en testsession till en reserverad order utan att tillåta byte till en annan session.
+    public void attachCheckoutSession(UUID reservationId, String customerName, String sessionId) {
+        if (sessionId == null || !sessionId.startsWith("cs_test_")) {
+            throw new IllegalArgumentException("A Stripe test Checkout session ID is required.");
+        }
+        transactions.executeWithoutResult(status -> {
+            var order = ownedOrder(reservationId, customerName);
+            if (order.getStatus() != OrderStatus.PENDING_PAYMENT || !order.isStockReserved()) {
+                throw new IllegalStateException("Order must have an active stock reservation.");
+            }
+            if (order.getStripeCheckoutSessionId() != null &&
+                    !order.getStripeCheckoutSessionId().equals(sessionId)) {
+                throw new IllegalStateException("Order already has a different Checkout session.");
+            }
+            order.setStripeCheckoutSessionId(sessionId);
+        });
+    }
+
+    // Omvandlar ordern till en stabil ögonblicksbild med priser och ursprungliga produkt-id:n.
+    private PaymentOrderResponseDTO snapshot(Order order) {
+        var items = order.getOrderItems().stream().map(item -> new OrderItemResponseDTO(
+                item.getProductId(), item.getName(), item.getPrice(), item.getQuantity())).toList();
+        return new PaymentOrderResponseDTO(order.getId(), order.getStockReservationId(), order.getCustomerName(),
+                order.getStatus(), order.isStockReserved(), order.getStripeCheckoutSessionId(),
+                order.getOrderDate(), order.getCheckoutRequestedAt(), order.getTotalPrice(), items);
     }
 
     // Hämtar och låser en order utan att lita på ett kundnamn från frontend.

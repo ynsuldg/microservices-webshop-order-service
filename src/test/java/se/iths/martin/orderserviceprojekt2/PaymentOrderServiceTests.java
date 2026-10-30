@@ -115,6 +115,21 @@ class PaymentOrderServiceTests {
         verifyNoInteractions(stock, messages);
     }
 
+    // Kontrollerar att samma testsession kan sparas igen men inte ersättas av en annan session.
+    @Test
+    void attachesCheckoutSessionIdempotently() {
+        var id = UUID.randomUUID();
+        when(stock.reserve(eq(id), eq("customer"), anyList())).thenReturn(products());
+        var prepared = service.prepare(id, "customer", request());
+        service.attachCheckoutSession(id, "customer", "cs_test_first");
+        service.attachCheckoutSession(id, "customer", "cs_test_first");
+        assertThrows(IllegalStateException.class,
+                () -> service.attachCheckoutSession(id, "customer", "cs_test_other"));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.attachCheckoutSession(id, "customer", "cs_live_invalid"));
+        assertEquals("cs_test_first", orders.findById(prepared.getId()).orElseThrow().getStripeCheckoutSessionId());
+    }
+
     // Skapar testets varukorg utan klientstyrda priser.
     private OrderRequestDTO request() {
         return new OrderRequestDTO(List.of(new OrderItemRequestDTO(42L, 2)));

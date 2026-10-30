@@ -130,6 +130,67 @@ class PaymentOrderServiceTests {
         assertEquals("cs_test_first", orders.findById(prepared.getId()).orElseThrow().getStripeCheckoutSessionId());
     }
 
+    // Kontrollerar att en verifierad betalning förbrukar reservationen och publicerar ordermejlet en gång.
+    @Test
+    void confirmsPaymentOnceForRepeatedCallbacks() {
+        var id = UUID.randomUUID();
+        when(stock.reserve(eq(id), eq("customer"), anyList())).thenReturn(products());
+        var prepared = service.prepare(id, "customer", request());
+        service.confirmPayment(id, "cs_test_paid", 2500L, "usd");
+        service.confirmPayment(id, "cs_test_paid", 2500L, "usd");
+        var saved = orders.findById(prepared.getId()).orElseThrow();
+        assertEquals(OrderStatus.PAID, saved.getStatus());
+        assertFalse(saved.isStockReserved());
+        assertFalse(saved.isConfirmationPending());
+        verify(stock, times(1)).consume(id, "customer");
+        verify(messages, times(1)).sendOrderConfirmation(any());
+        assertThrows(IllegalStateException.class, () -> service.release(id, "customer"));
+    }
+
+    // Kontrollerar att fel belopp eller valuta inte betalar ordern eller förbrukar reservationen.
+    @Test
+    void rejectsWrongPaymentAmountAndCurrency() {
+        var id = UUID.randomUUID();
+        when(stock.reserve(eq(id), eq("customer"), anyList())).thenReturn(products());
+        var prepared = service.prepare(id, "customer", request());
+        assertThrows(IllegalArgumentException.class, () -> service.confirmPayment(id, "cs_test_paid", 1L, "usd"));
+        assertThrows(IllegalArgumentException.class, () -> service.confirmPayment(id, "cs_test_paid", 2500L, "sek"));
+        assertEquals(OrderStatus.PENDING_PAYMENT, orders.findById(prepared.getId()).orElseThrow().getStatus());
+        verify(stock, never()).consume(any(), any());
+        verifyNoInteractions(messages);
+    }
+
+    // Kontrollerar att en utgången session återställer lagret en gång och inte skickar ordermejl.
+    @Test
+    void expiresPaymentOnce() {
+        var id = UUID.randomUUID();
+        when(stock.reserve(eq(id), eq("customer"), anyList())).thenReturn(products());
+        var prepared = service.prepare(id, "customer", request());
+        service.expirePayment(id, "cs_test_expired");
+        service.expirePayment(id, "cs_test_expired");
+        assertEquals(OrderStatus.CANCELLED, orders.findById(prepared.getId()).orElseThrow().getStatus());
+        verify(stock, times(1)).release(id, "customer");
+        verifyNoInteractions(messages);
+    }
+
+    // Kontrollerar att betald order bevaras när mejlpublicering misslyckas och att webhooken kan försöka igen.
+    @Test
+    void retriesPendingConfirmationAfterPublishFailure() {
+        var id = UUID.randomUUID();
+        when(stock.reserve(eq(id), eq("customer"), anyList())).thenReturn(products());
+        var prepared = service.prepare(id, "customer", request());
+        doThrow(new org.springframework.amqp.AmqpException("Simulated publish failure")).doNothing()
+                .when(messages).sendOrderConfirmation(any());
+        assertThrows(org.springframework.amqp.AmqpException.class,
+                () -> service.confirmPayment(id, "cs_test_paid", 2500L, "usd"));
+        var saved = orders.findById(prepared.getId()).orElseThrow();
+        assertEquals(OrderStatus.PAID, saved.getStatus());
+        assertTrue(saved.isConfirmationPending());
+        service.confirmPayment(id, "cs_test_paid", 2500L, "usd");
+        assertFalse(orders.findById(prepared.getId()).orElseThrow().isConfirmationPending());
+        verify(stock, times(1)).consume(id, "customer");
+    }
+
     // Skapar testets varukorg utan klientstyrda priser.
     private OrderRequestDTO request() {
         return new OrderRequestDTO(List.of(new OrderItemRequestDTO(42L, 2)));

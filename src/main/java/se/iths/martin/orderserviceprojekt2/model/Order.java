@@ -40,4 +40,5 @@ public class Order {
     private UUID stockReservationId;
     private boolean stockReserved;
     private java.time.Instant checkoutRequestedAt;
+    private boolean confirmationPending;
 }

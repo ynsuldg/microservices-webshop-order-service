@@ -11,6 +11,8 @@ import se.iths.martin.orderserviceprojekt2.client.StockReservationClient;
 import se.iths.martin.orderserviceprojekt2.dto.OrderRequestDTO;
 import se.iths.martin.orderserviceprojekt2.dto.PaymentOrderResponseDTO;
 import se.iths.martin.orderserviceprojekt2.dto.OrderItemResponseDTO;
+import se.iths.martin.orderserviceprojekt2.dto.OrderResponseDTO;
+import se.iths.martin.orderserviceprojekt2.messaging.OrderMessageProducer;
 import se.iths.martin.orderserviceprojekt2.model.Order;
 import se.iths.martin.orderserviceprojekt2.model.OrderItem;
 import se.iths.martin.orderserviceprojekt2.model.OrderStatus;
@@ -25,11 +27,14 @@ public class PaymentOrderService {
     private final OrderRepository orders;
     private final StockReservationClient stock;
     private final TransactionTemplate transactions;
+    private final OrderMessageProducer messages;
 
     // Skapar separata lokala transaktioner så att orderns id finns kvar även om ett produktanrop misslyckas.
-    public PaymentOrderService(OrderRepository orders, StockReservationClient stock, PlatformTransactionManager manager) {
+    public PaymentOrderService(OrderRepository orders, StockReservationClient stock, PlatformTransactionManager manager,
+                               OrderMessageProducer messages) {
         this.orders = orders;
         this.stock = stock;
+        this.messages = messages;
         this.transactions = new TransactionTemplate(manager);
         this.transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -136,6 +141,82 @@ public class PaymentOrderService {
             }
             order.setStripeCheckoutSessionId(sessionId);
         });
+    }
+
+    // Läser orderns betalningsuppgifter för en betrodd intern kontroll av Stripe-sessionen.
+    public PaymentOrderResponseDTO getPaymentOrder(UUID reservationId) {
+        return transactions.execute(status -> snapshot(lockedOrder(reservationId)));
+    }
+
+    // Bekräftar verifierad betalning, förbrukar lagret och sparar mejlbehovet innan publicering.
+    public void confirmPayment(UUID reservationId, String sessionId, Long amountTotal, String currency) {
+        transactions.executeWithoutResult(status -> {
+            var order = lockedOrder(reservationId);
+            checkSession(order, sessionId);
+            if (!"usd".equals(currency) || amountTotal == null ||
+                    order.getTotalPrice().movePointRight(2).longValueExact() != amountTotal) {
+                throw new IllegalArgumentException("Payment amount or currency does not match the order.");
+            }
+            if (order.getStatus() == OrderStatus.PAID) {
+                return;
+            }
+            if (order.getStatus() != OrderStatus.PENDING_PAYMENT || !order.isStockReserved()) {
+                throw new IllegalStateException("Order has no active payment reservation.");
+            }
+            stock.consume(reservationId, order.getCustomerName());
+            order.setStripeCheckoutSessionId(sessionId);
+            order.setStatus(OrderStatus.PAID);
+            order.setStockReserved(false);
+            order.setConfirmationPending(true);
+        });
+        sendPendingConfirmation(reservationId);
+    }
+
+    // Återställer endast en obetald order efter att Stripe verifierat att rätt session har löpt ut.
+    public void expirePayment(UUID reservationId, String sessionId) {
+        transactions.executeWithoutResult(status -> {
+            var order = lockedOrder(reservationId);
+            checkSession(order, sessionId);
+            if (order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.PAID) {
+                return;
+            }
+            if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
+                throw new IllegalStateException("Order is not awaiting payment.");
+            }
+            stock.release(reservationId, order.getCustomerName());
+            order.setStripeCheckoutSessionId(sessionId);
+            order.setStockReserved(false);
+            order.setStatus(OrderStatus.CANCELLED);
+        });
+    }
+
+    // Försöker publicera ett väntande ordermejl igen om ett tidigare RabbitMQ-anrop misslyckats.
+    private void sendPendingConfirmation(UUID id) {
+        transactions.executeWithoutResult(status -> {
+            var order = lockedOrder(id);
+            if (order.getStatus() != OrderStatus.PAID || !order.isConfirmationPending()) {
+                return;
+            }
+            var response = snapshot(order);
+            messages.sendOrderConfirmation(new OrderResponseDTO(order.getId(), order.getOrderDate(),
+                    order.getCustomerName(), order.getTotalPrice(), response.items()));
+            // Publicering och databas är inte en gemensam transaktion; leveransen är inte exakt-en-gång vid processkrasch.
+            order.setConfirmationPending(false);
+        });
+    }
+
+    // Låser ordern för att serialisera upprepade betalningshändelser.
+    private Order lockedOrder(UUID id) {
+        return orders.findLockedByStockReservationId(id)
+                .orElseThrow(() -> new IllegalArgumentException("Payment order not found."));
+    }
+
+    // Tillåter bara en testsession per order, även om webhooken hinner fram före sessionskopplingen.
+    private void checkSession(Order order, String sessionId) {
+        if (sessionId == null || !sessionId.startsWith("cs_test_") ||
+                (order.getStripeCheckoutSessionId() != null && !order.getStripeCheckoutSessionId().equals(sessionId))) {
+            throw new IllegalArgumentException("Stripe session does not match the payment order.");
+        }
     }
 
     // Omvandlar ordern till en stabil ögonblicksbild med priser och ursprungliga produkt-id:n.

@@ -18,8 +18,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.HashSet;
-import java.util.Set;
 
 /**
  * Hanterar orderläggning, beräkning av totalpris och lagring av order.
@@ -54,38 +52,6 @@ public class OrderService {
         OrderResponseDTO response = mapToResponse(savedOrder);
         orderMessageProducer.sendOrderConfirmation(response);
         return response;
-    }
-
-    /**
-     * Förbereder en order för betalning och minskar tillgängligt lager utan att skicka ordermejl.
-     * Metoden kopplas inte till checkout förrän återställning av reservationer finns på plats.
-     *
-     * @param request produkt-id:n och antal som ska reserveras
-     * @param customerName kundens identitet från JWT
-     * @param bearerToken kundens Authorization-header för produktanropet
-     * @return ordern med produktpriser från backend
-     * @throws IllegalArgumentException om varukorgen är tom eller innehåller ogiltiga eller upprepade produkt-id:n
-     */
-    public OrderResponseDTO prepareOrderForPayment(
-            OrderRequestDTO request,
-            String customerName,
-            String bearerToken) {
-        validatePaymentRequest(request);
-        return mapToResponse(saveOrder(request, customerName, bearerToken, OrderStatus.PENDING_PAYMENT));
-    }
-
-    // Kontrollerar varukorgen innan något anrop kan minska lagret.
-    private void validatePaymentRequest(OrderRequestDTO request) {
-        if (request == null || request.getItems() == null || request.getItems().isEmpty()) {
-            throw new IllegalArgumentException("Order must contain at least one item.");
-        }
-        Set<Long> productIds = new HashSet<>();
-        for (var item : request.getItems()) {
-            if (item == null || item.getProductId() == null || item.getProductId() <= 0 ||
-                    item.getQuantity() <= 0 || !productIds.add(item.getProductId())) {
-                throw new IllegalArgumentException("Each item must have a unique positive product ID and a positive quantity.");
-            }
-        }
     }
 
     // Hämtar produktuppgifter, minskar lagret och sparar ordern med angiven status.

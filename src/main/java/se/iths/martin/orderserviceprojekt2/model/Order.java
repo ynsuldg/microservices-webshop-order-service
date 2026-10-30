@@ -9,6 +9,7 @@ import lombok.Setter;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Databasentitet för en order med kund, datum, orderrader och totalpris.
@@ -34,4 +35,8 @@ public class Order {
 
     @Column(unique = true)
     private String stripeCheckoutSessionId;
+
+    @Column(unique = true)
+    private UUID stockReservationId;
+    private boolean stockReserved;
 }

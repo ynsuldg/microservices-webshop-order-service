@@ -12,6 +12,7 @@ import se.iths.martin.orderserviceprojekt2.dto.ProductInfoDTO;
 import se.iths.martin.orderserviceprojekt2.messaging.OrderMessageProducer;
 import se.iths.martin.orderserviceprojekt2.model.Order;
 import se.iths.martin.orderserviceprojekt2.model.OrderItem;
+import se.iths.martin.orderserviceprojekt2.model.OrderStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -47,18 +48,28 @@ public class OrderService {
             String customerName,
             String bearerToken) {
 
+        Order savedOrder = saveOrder(request, customerName, bearerToken, OrderStatus.CREATED);
+        OrderResponseDTO response = mapToResponse(savedOrder);
+        orderMessageProducer.sendOrderConfirmation(response);
+        return response;
+    }
+
+    // Hämtar produktuppgifter, minskar lagret och sparar ordern med angiven status.
+    private Order saveOrder(OrderRequestDTO request, String customerName, String bearerToken, OrderStatus status) {
         List<ProductInfoDTO> products =
                 productClient.decreaseStock(request, bearerToken);
 
         Order order = new Order();
         order.setOrderDate(LocalDateTime.now());
         order.setCustomerName(customerName);
+        order.setStatus(status);
 
         List<OrderItem> orderItems = new ArrayList<>();
 
         for (ProductInfoDTO product : products) {
 
             OrderItem item = new OrderItem();
+            item.setProductId(product.getId());
             item.setName(product.getName());
             item.setPrice(product.getPrice());
             item.setQuantity(product.getQuantity());
@@ -76,22 +87,17 @@ public class OrderService {
         order.setOrderItems(orderItems);
         order.setTotalPrice(totalPrice);
 
-        Order savedOrder = orderRepository.save(order);
-
-        OrderResponseDTO response = mapToResponse(savedOrder);
-
-        orderMessageProducer.sendOrderConfirmation(response);
-
-        return response;
+        return orderRepository.save(order);
     }
 
+    // Omvandlar den sparade ordern till ett svar med ursprungliga produkt-id:n.
     private OrderResponseDTO mapToResponse(Order order) {
 
         List<OrderItemResponseDTO> items =
                 order.getOrderItems()
                         .stream()
                         .map(item -> new OrderItemResponseDTO(
-                                item.getId(),
+                                item.getProductId(),
                                 item.getName(),
                                 item.getPrice(),
                                 item.getQuantity()

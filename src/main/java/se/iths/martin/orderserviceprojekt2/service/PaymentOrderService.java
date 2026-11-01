@@ -145,7 +145,9 @@ public class PaymentOrderService {
 
     // Läser orderns betalningsuppgifter för en betrodd intern kontroll av Stripe-sessionen.
     public PaymentOrderResponseDTO getPaymentOrder(UUID reservationId) {
-        return transactions.execute(status -> snapshot(lockedOrder(reservationId)));
+        return transactions.execute(status -> snapshot(orders.findLockedByStockReservationId(reservationId)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.NOT_FOUND, "Payment order not found."))));
     }
 
     // Bekräftar verifierad betalning, förbrukar lagret och sparar mejlbehovet innan publicering.

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Order Service - Demo Webshop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&amp;display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+      --background: #fff; --text: #000;
+      --border: oklch(86.9% .022 252.894); --muted: oklch(44.6% .043 257.281); --subtle: oklch(55.4% .046 257.417);
+      --button-border: oklch(70.4% .04 256.788); --button-text: oklch(37.2% .044 257.287);
+      --hover: oklch(96.8% .007 247.896); --hover-text: oklch(20.8% .042 265.755); --pressed: oklch(92.9% .013 255.508);
+      --badge-background: oklch(93.2% .032 255.585); --badge-text: oklch(42.4% .199 265.638);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --background: oklch(13% .028 261.692); --text: #fff;
+        --border: oklch(37.2% .044 257.287); --muted: oklch(86.9% .022 252.894); --subtle: oklch(70.4% .04 256.788);
+        --button-border: oklch(44.6% .043 257.281); --button-text: oklch(86.9% .022 252.894);
+        --hover: oklch(27.9% .041 260.031); --hover-text: oklch(96.8% .007 247.896); --pressed: oklch(37.2% .044 257.287);
+        --badge-background: oklch(28.2% .091 267.935); --badge-text: oklch(88.2% .059 254.128);
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; min-height: 100svh; display: grid; place-items: center; padding: 48px 16px; color: var(--text); background: var(--background); }
+    main { width: 100%; max-width: 672px; padding: 32px; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 1px 2px #0000000d; }
+    .brand { margin: 0 0 16px; color: var(--subtle); font-size: 12px; font-weight: 400; letter-spacing: .25em; line-height: 16px; }
+    h1 { margin: 0 0 16px; font-size: 30px; font-weight: 700; line-height: 36px; overflow-wrap: anywhere; }
+    .status { display: inline-flex; align-items: center; gap: 8px; margin: 0; padding: 4px 12px; border-radius: 999px; color: var(--badge-text); background: var(--badge-background); font-size: 14px; font-weight: 500; line-height: 20px; }
+    .status::before { content: ""; width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: currentColor; }
+    .description { margin: 24px 0 0; color: var(--muted); font-size: 16px; line-height: 24px; }
+    .note { margin: 8px 0 0; color: var(--subtle); font-size: 14px; line-height: 20px; }
+    a { display: inline-flex; align-items: center; justify-content: center; margin-top: 32px; padding: 12px 24px; border: 2px solid var(--button-border); border-radius: 2px; color: var(--button-text); font-size: 14px; font-weight: 500; line-height: 20px; text-decoration: none; transition: background-color .15s, color .15s, transform .15s; }
+    a:hover { background: var(--hover); color: var(--hover-text); }
+    a:active { transform: translateY(1px); background: var(--pressed); }
+    a:focus-visible { outline: 2px solid var(--subtle); outline-offset: 4px; }
+    @media (prefers-reduced-motion: reduce) { a { transition: none; } a:active { transform: none; } }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="brand">Demo Webshop</p>
+    <h1>Order Service</h1>
+    <p class="status">Service is running</p>
+    <p class="description">This is a backend API for Demo Webshop.</p>
+    <p class="note">This page confirms that this service responds. Other services are not checked.</p>
+    <a href="https://microservices-webshop-frontend.onrender.com">Open Demo Webshop</a>
+  </main>
+</body>
+</html>

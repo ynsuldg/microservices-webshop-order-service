@@ -29,7 +29,16 @@ public class PaymentOrderService {
     private final TransactionTemplate transactions;
     private final OrderMessageProducer messages;
 
-    // Skapar separata lokala transaktioner så att orderns id finns kvar även om ett produktanrop misslyckas.
+    /**
+     * Skapar separata lokala transaktioner så att orderns id finns kvar även om ett produktanrop misslyckas.
+     *
+     * Ingår i betalningsflödet.
+     *
+     * @param orders databasåtkomst för order
+     * @param stock klient för lagerreservationer
+     * @param manager hanterar databastransaktioner
+     * @param messages publicerar orderbekräftelser
+     */
     public PaymentOrderService(OrderRepository orders, StockReservationClient stock, PlatformTransactionManager manager,
                                OrderMessageProducer messages) {
         this.orders = orders;
@@ -39,7 +48,16 @@ public class PaymentOrderService {
         this.transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    // Sparar avsikten före nätverksanropet och återanvänder samma reservation för samma kund och varukorg.
+    /**
+     * Sparar avsikten före nätverksanropet och återanvänder samma reservation för samma kund och varukorg.
+     *
+     * Ingår i betalningsflödet.
+     *
+     * @param reservationId lagerreservationens unika id
+     * @param customerName namnet på kunden som äger reservationen
+     * @param request uppgifter för anropet
+     * @return den förberedda ordern
+     */
     public Order prepare(UUID reservationId, String customerName, OrderRequestDTO request) {
         validate(reservationId, customerName, request);
         try {
@@ -104,7 +122,14 @@ public class PaymentOrderService {
         });
     }
 
-    // Återställer en obetald order efter ett säkert avbrott eller en verifierat utgången Stripe-session.
+    /**
+     * Återställer en obetald order efter ett säkert avbrott eller en verifierat utgången Stripe-session.
+     *
+     * Ingår i betalningsflödet.
+     *
+     * @param reservationId lagerreservationens unika id
+     * @param customerName namnet på kunden som äger reservationen
+     */
     public void release(UUID reservationId, String customerName) {
         transactions.executeWithoutResult(status -> {
             var order = ownedOrder(reservationId, customerName);
@@ -120,12 +145,29 @@ public class PaymentOrderService {
         });
     }
 
-    // Förbereder ordern och returnerar endast de uppgifter som betalningstjänsten behöver.
+    /**
+     * Förbereder ordern och returnerar endast de uppgifter som betalningstjänsten behöver.
+     *
+     * Ingår i betalningsflödet.
+     *
+     * @param reservationId lagerreservationens unika id
+     * @param customerName namnet på kunden som äger reservationen
+     * @param request uppgifter för anropet
+     * @return betalningsorderns uppgifter och aktuella status
+     */
     public PaymentOrderResponseDTO prepareCheckout(UUID reservationId, String customerName, OrderRequestDTO request) {
         return snapshot(prepare(reservationId, customerName, request));
     }
 
-    // Kopplar en testsession till en reserverad order utan att tillåta byte till en annan session.
+    /**
+     * Kopplar en testsession till en reserverad order utan att tillåta byte till en annan session.
+     *
+     * Ingår i betalningsflödet.
+     *
+     * @param reservationId lagerreservationens unika id
+     * @param customerName namnet på kunden som äger reservationen
+     * @param sessionId Stripe Checkout-sessionens id
+     */
     public void attachCheckoutSession(UUID reservationId, String customerName, String sessionId) {
         if (sessionId == null || !sessionId.startsWith("cs_test_")) {
             throw new IllegalArgumentException("A Stripe test Checkout session ID is required.");
@@ -143,14 +185,30 @@ public class PaymentOrderService {
         });
     }
 
-    // Läser orderns betalningsuppgifter för en betrodd intern kontroll av Stripe-sessionen.
+    /**
+     * Läser orderns betalningsuppgifter för en betrodd intern kontroll av Stripe-sessionen.
+     *
+     * Ingår i betalningsflödet.
+     *
+     * @param reservationId lagerreservationens unika id
+     * @return betalningsorderns uppgifter och aktuella status
+     */
     public PaymentOrderResponseDTO getPaymentOrder(UUID reservationId) {
         return transactions.execute(status -> snapshot(orders.findLockedByStockReservationId(reservationId)
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
                         org.springframework.http.HttpStatus.NOT_FOUND, "Payment order not found."))));
     }
 
-    // Bekräftar verifierad betalning, förbrukar lagret och sparar mejlbehovet innan publicering.
+    /**
+     * Bekräftar verifierad betalning, förbrukar lagret och sparar mejlbehovet innan publicering.
+     *
+     * Ingår i betalningsflödet.
+     *
+     * @param reservationId lagerreservationens unika id
+     * @param sessionId Stripe Checkout-sessionens id
+     * @param amountTotal betalt totalbelopp i minsta valutaenhet
+     * @param currency betalningens valutakod
+     */
     public void confirmPayment(UUID reservationId, String sessionId, Long amountTotal, String currency) {
         transactions.executeWithoutResult(status -> {
             var order = lockedOrder(reservationId);
@@ -174,7 +232,14 @@ public class PaymentOrderService {
         sendPendingConfirmation(reservationId);
     }
 
-    // Återställer endast en obetald order efter att Stripe verifierat att rätt session har löpt ut.
+    /**
+     * Återställer endast en obetald order efter att Stripe verifierat att rätt session har löpt ut.
+     *
+     * Ingår i betalningsflödet.
+     *
+     * @param reservationId lagerreservationens unika id
+     * @param sessionId Stripe Checkout-sessionens id
+     */
     public void expirePayment(UUID reservationId, String sessionId) {
         transactions.executeWithoutResult(status -> {
             var order = lockedOrder(reservationId);

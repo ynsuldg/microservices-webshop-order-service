@@ -17,13 +17,29 @@ public class StockReservationClient {
     private final RestClient client;
     private final String token;
 
-    // Tar emot befintlig produktklient och den interna serverhemligheten.
+    /**
+     * Tar emot befintlig produktklient och den interna serverhemligheten.
+     *
+     * Ingår i betalningsflödet.
+     *
+     * @param productRestClient HTTP-klient för product-service
+     * @param token delad hemlighet för interna tjänsteanrop
+     */
     public StockReservationClient(RestClient productRestClient, @Value("${internal.service-token:}") String token) {
         this.client = productRestClient;
         this.token = token;
     }
 
-    // Reserverar med samma id vid återförsök och hämtar backendens sparade priser.
+    /**
+     * Reserverar med samma id vid återförsök och hämtar backendens sparade priser.
+     *
+     * Ingår i betalningsflödet.
+     *
+     * @param id id för den efterfrågade posten eller reservationen
+     * @param customerName namnet på kunden som äger reservationen
+     * @param items produkter och antal i ordern
+     * @return reserverade produkter med pris och antal
+     */
     public List<ProductInfoDTO> reserve(UUID id, String customerName, List<OrderItemRequestDTO> items) {
         checkConfiguration();
         var response = client.post().uri("/internal/stock-reservations/{id}", id)
@@ -36,7 +52,14 @@ public class StockReservationClient {
         return response;
     }
 
-    // Begär återställning även när ett tidigare reservationsanrop kan ha tappat sitt svar.
+    /**
+     * Begär återställning även när ett tidigare reservationsanrop kan ha tappat sitt svar.
+     *
+     * Ingår i betalningsflödet.
+     *
+     * @param id id för den efterfrågade posten eller reservationen
+     * @param customerName namnet på kunden som äger reservationen
+     */
     public void release(UUID id, String customerName) {
         checkConfiguration();
         client.post().uri("/internal/stock-reservations/{id}/release", id)
@@ -44,7 +67,14 @@ public class StockReservationClient {
                 .body(Map.of("customerName", customerName)).retrieve().toBodilessEntity();
     }
 
-    // Slutför reservationen utan ytterligare lagerminskning.
+    /**
+     * Slutför reservationen utan ytterligare lagerminskning.
+     *
+     * Ingår i betalningsflödet.
+     *
+     * @param id id för den efterfrågade posten eller reservationen
+     * @param customerName namnet på kunden som äger reservationen
+     */
     public void consume(UUID id, String customerName) {
         checkConfiguration();
         client.post().uri("/internal/stock-reservations/{id}/consume", id)

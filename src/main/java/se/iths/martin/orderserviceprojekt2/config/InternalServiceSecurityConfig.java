@@ -16,7 +16,16 @@ import java.security.MessageDigest;
 @Configuration
 public class InternalServiceSecurityConfig {
 
-    // Skyddar interna sökvägar med en serverhemlighet utan att påverka tjänstens vanliga säkerhetskedja.
+    /**
+     * Skyddar interna sökvägar med en serverhemlighet utan att påverka tjänstens vanliga säkerhetskedja.
+     *
+     * Ingår i betalningsflödet.
+     *
+     * @param http säkerhetskonfigurationen som ska byggas
+     * @param serviceToken delad hemlighet för interna tjänsteanrop
+     * @return den konfigurerade säkerhetsfilterkedjan
+     * @throws Exception om säkerhetskonfigurationen inte kan skapas
+     */
     @Bean
     @Order(1)
     public SecurityFilterChain internalServiceFilterChain(

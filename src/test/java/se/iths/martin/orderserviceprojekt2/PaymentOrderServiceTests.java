@@ -34,6 +34,15 @@ class PaymentOrderServiceTests {
         orders.deleteAll();
     }
 
+    // Skiljer saknad betalningsorder från felaktig varukorg och tillfälliga serverfel.
+    @Test
+    void missingPaymentOrderReturnsNotFound() {
+        var exception = assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> service.getPaymentOrder(UUID.randomUUID()));
+        assertEquals(404, exception.getStatusCode().value());
+        verifyNoInteractions(stock, messages);
+    }
+
     // Kontrollerar att samma betalningsorder återanvänds med backendpris och utan extra reservation eller mejl.
     @Test
     void preparesAndRetriesSameOrderWithoutReservingTwice() {
